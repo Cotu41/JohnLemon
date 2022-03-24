@@ -32,7 +32,7 @@ public class CharacterController : MonoBehaviour
     Transform body;
 
     public delegate void PlayerStatChanged(float newAmount);
-    public static event PlayerStatChanged OnDamageTaken, OnStaminaUsed, OnDeath;
+    public static event PlayerStatChanged OnDamageTaken, OnStaminaUsed, OnDeath, OnWin;
 
     Coroutine stamina_regen;
 
@@ -48,9 +48,14 @@ public class CharacterController : MonoBehaviour
         OnDeath += CharacterController_OnDeath;
     }
 
+    public static void winIt()
+    {
+        OnWin(0);
+    }
     private void CharacterController_OnDeath(float newAmount)
     {
         dead = true;
+        GetComponent<AudioSource>().Play();
     }
 
     private void CharacterController_OnStaminaUsed(float newAmount)
