@@ -14,12 +14,16 @@ public class CharacterController : MonoBehaviour
     public float moveSpeed = 3f;
 
     public float stamina_regen_speed = 3f;
+    public float stamina_regen_delay = 2f;
 
     bool freezeInput = false;
+    bool dead = false;
 
     float rollDuration = 1f;
     float rollProgress = 0f;
     float rollSpeed = 4f;
+
+    bool rolling = false;
 
     Vector3 aimForward, aimRight;
     Vector3 debugVector;
@@ -28,7 +32,7 @@ public class CharacterController : MonoBehaviour
     Transform body;
 
     public delegate void PlayerStatChanged(float newAmount);
-    public static event PlayerStatChanged OnDamageTaken, OnStaminaUsed;
+    public static event PlayerStatChanged OnDamageTaken, OnStaminaUsed, OnDeath;
 
     Coroutine stamina_regen;
 
@@ -41,6 +45,12 @@ public class CharacterController : MonoBehaviour
         body = transform.GetChild(0);
 
         OnStaminaUsed += CharacterController_OnStaminaUsed;
+        OnDeath += CharacterController_OnDeath;
+    }
+
+    private void CharacterController_OnDeath(float newAmount)
+    {
+        dead = true;
     }
 
     private void CharacterController_OnStaminaUsed(float newAmount)
@@ -54,92 +64,97 @@ public class CharacterController : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        aimForward = Camera.main.transform.forward; // Move relative to camera direction
-        aimRight = Camera.main.transform.right;
 
-        Vector3 movement = new Vector3();
-        float horizontal = 0, vertical = 0;
-
-        if (!freezeInput)
+        if (!dead)
         {
-            horizontal = Input.GetAxis("Horizontal");
-            vertical = Input.GetAxis("Vertical");
+            aimForward = Camera.main.transform.forward; // Move relative to camera direction
+            aimRight = Camera.main.transform.right;
+
+            Vector3 movement = new Vector3();
+            float horizontal = 0, vertical = 0;
+
+            if (!freezeInput)
+            {
+                horizontal = Input.GetAxis("Horizontal");
+                vertical = Input.GetAxis("Vertical");
+            }
+
+
+            if (Input.GetButtonDown("Jump") && stamina >= rollCost)
+            {
+                //print("ROLL");
+                animator.SetTrigger("roll");
+                rollProgress = rollDuration;
+                stamina -= rollCost;
+                OnStaminaUsed(stamina);
+            }
+
+            if (Input.GetKeyDown(KeyCode.Backspace))
+            {
+                TakeDamage(10);
+            }
+
+            movement = Vector3.ProjectOnPlane(aimForward, Vector3.down) * vertical;
+            movement += aimRight * horizontal;
+
+
+            if (!freezeInput)
+                transform.position += movement * Time.deltaTime * moveSpeed;
+
+
+
+            //movement = transform.localToWorldMatrix.MultiplyPoint(movement);
+
+
+
+
+            if (horizontal + vertical != 0)
+            {
+                body.rotation = Quaternion.Lerp(body.rotation, Quaternion.LookRotation(movement), Time.deltaTime * turnSpeed);
+                animator.SetBool("moving", true);
+            }
+            else animator.SetBool("moving", false);
+
+            if (rollProgress > 0)
+            {
+                freezeInput = true;
+                rollProgress -= Time.deltaTime;
+                transform.position += body.transform.forward * rollSpeed * Time.deltaTime;
+                rolling = true;
+            }
+            else
+            {
+                rolling = false;
+                freezeInput = false;
+            }
+
+
+            //movement -= body.forward;
+            //movement = Vector3.Normalize(movement);
+
+            animator.SetFloat("x_move", movement.x);
+            animator.SetFloat("z_move", movement.z);
+
         }
-
-
-        if (Input.GetButtonDown("Jump") && stamina >= rollCost)
-        {
-            //print("ROLL");
-            animator.SetTrigger("roll");
-            rollProgress = rollDuration;
-            stamina -= rollCost;
-            OnStaminaUsed(stamina);
-        }
-
-        if(Input.GetKeyDown(KeyCode.Backspace))
-        {
-            TakeDamage(10);
-        }
-
-        movement = Vector3.ProjectOnPlane(aimForward, Vector3.down)*vertical;
-        movement += aimRight * horizontal;
-
         
-        if(!freezeInput)
-            transform.position += movement * Time.deltaTime * moveSpeed;
 
-
-
-        //movement = transform.localToWorldMatrix.MultiplyPoint(movement);
-
-
-
-
-        if (horizontal + vertical != 0)
-        {
-            body.rotation = Quaternion.Lerp(body.rotation, Quaternion.LookRotation(movement), Time.deltaTime*turnSpeed);
-            animator.SetBool("moving", true);
-        }
-        else animator.SetBool("moving", false);
-
-        if (rollProgress > 0)
-        {
-            freezeInput = true;
-            rollProgress -= Time.deltaTime;
-            transform.position += body.transform.forward * rollSpeed * Time.deltaTime;
-        }
-        else
-        {
-            freezeInput = false;
-        }
-
-
-        //movement -= body.forward;
-        //movement = Vector3.Normalize(movement);
-
-        animator.SetFloat("x_move", movement.x);
-        animator.SetFloat("z_move", movement.z);
-        
-        
-        
-
-        debugVector = movement;
+        //debugVector = movement;
     }
 
-    void TakeDamage(float damage)
+    public void TakeDamage(float damage)
     {
         health -= damage;
         OnDamageTaken(health);
         if(health <= 0)
         {
-
-            //@TODO DIE
+            animator.SetTrigger("death");
+            OnDeath(0);
         }
     }
 
     IEnumerator StaminaRegen()
     {
-        yield return new WaitForSeconds(1f);
+        yield return new WaitForSeconds(stamina_regen_delay);
         while(true)
         {
             stamina += stamina_regen_speed * Time.deltaTime;
